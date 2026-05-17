@@ -2,9 +2,10 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
+from django.utils import timezone
 
-from .models import CustomUser
-from .serializers import UserSerializer
+from .models import CustomUser, ProfileViewLog
+from .serializers import ProfileViewLogSerializer, UserSerializer
 
 
 class UserList(generics.ListCreateAPIView):
@@ -27,6 +28,29 @@ class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = CustomUser.objects.exclude(is_superuser=True)
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object() # The host user
+        visitor = request.user       # The viewing user
+
+        if visitor.is_authenticated and visitor != instance:
+            # Upsert mechanic: updates timestamp if match exists, otherwise creates it
+            ProfileViewLog.objects.update_or_create(
+                visitor=visitor,
+                host=instance,
+                defaults={'timestamp': timezone.now()}
+            )
+
+        return super().retrieve(request, *args, **kwargs)
+
+# New API endpoint view to read logs belonging to current user
+class VisitorHistoryList(generics.ListAPIView):
+    serializer_class = ProfileViewLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Fetch views received by the logged in host
+        return ProfileViewLog.objects.filter(host=self.request.user)
 
 
 class CurrentUserView(generics.RetrieveAPIView):

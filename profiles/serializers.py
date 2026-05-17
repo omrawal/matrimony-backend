@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CustomUser
+from .models import CustomUser, ProfileViewLog
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -53,3 +53,10 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+    
+class ProfileViewLogSerializer(serializers.ModelSerializer):
+    visitor_details = UserSerializer(source='visitor', read_only=True)
+
+    class Meta:
+        model = ProfileViewLog
+        fields = ['id', 'visitor_details', 'timestamp']
