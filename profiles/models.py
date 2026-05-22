@@ -8,6 +8,8 @@ class CustomUser(AbstractUser):
         ('male', 'Male'),
         ('female', 'Female'),
     ]
+    first_name = models.CharField(max_length=150)
+    last_name = models.CharField(max_length=150)
     age = models.IntegerField(null=True, blank=True)
     cast = models.CharField(max_length=100, null=True, blank=True)
     location = models.CharField(max_length=255, null=True, blank=True)
@@ -16,7 +18,11 @@ class CustomUser(AbstractUser):
     bio = models.TextField(null=True, blank=True)
 
     def __str__(self):
-        return self.username
+        # Fallback string formatting to avoid NoneType concatenation errors
+        f_name = self.first_name or ""
+        l_name = self.last_name or ""
+        name_str = f" ({f_name} {l_name})".strip()
+        return f"{self.username}{name_str if f_name or l_name else ''}"
 
 
 class ProfileViewLog(models.Model):
