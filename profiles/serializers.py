@@ -11,6 +11,12 @@ class UserSerializer(serializers.ModelSerializer):
     # Custom read-only field computed at runtime
     full_name = serializers.SerializerMethodField()
 
+    # photos_data = serializers.ListField(
+    #     child=serializers.DictField(), write_only=True, required=False
+    # )
+    profile_picture = serializers.SerializerMethodField()
+    verification_status = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
         fields = [
@@ -27,6 +33,9 @@ class UserSerializer(serializers.ModelSerializer):
             'preferences',
             'bio',
             'password',
+            'profile_picture',
+            'is_verified',
+            'verification_status',
         ]
         extra_kwargs = {
             'password': {
@@ -58,6 +67,18 @@ class UserSerializer(serializers.ModelSerializer):
             instance.set_password(password)
         instance.save()
         return instance
+    
+    def get_profile_picture(self, obj):
+        photo = obj.photos.filter(is_profile_pic=True).first()
+        return photo.image_url if photo else None
+
+    def get_verification_status(self, obj):
+        if obj.is_verified:
+            return 'verified'
+        # If they are not verified, but have at least 1 ID proof, they are pending
+        if obj.id_proofs.exists():
+            return 'pending'
+        return 'unverified'
 
     
 class ProfileViewLogSerializer(serializers.ModelSerializer):
