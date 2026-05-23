@@ -10,6 +10,7 @@ class UserSerializer(serializers.ModelSerializer):
     
     # Custom read-only field computed at runtime
     full_name = serializers.SerializerMethodField()
+    album = serializers.SerializerMethodField()
 
     # photos_data = serializers.ListField(
     #     child=serializers.DictField(), write_only=True, required=False
@@ -22,9 +23,9 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'username',
-            'first_name',  # Added
-            'last_name',   # Added
-            'full_name',   # Added
+            'first_name',
+            'last_name',
+            'full_name',  
             'email',
             'age',
             'cast',
@@ -36,6 +37,7 @@ class UserSerializer(serializers.ModelSerializer):
             'profile_picture',
             'is_verified',
             'verification_status',
+            'is_staff','album',
         ]
         extra_kwargs = {
             'password': {
@@ -79,6 +81,9 @@ class UserSerializer(serializers.ModelSerializer):
         if obj.id_proofs.exists():
             return 'pending'
         return 'unverified'
+
+    def get_album(self, obj):
+        return [photo.image_url for photo in obj.photos.all()]
 
     
 class ProfileViewLogSerializer(serializers.ModelSerializer):

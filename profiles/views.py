@@ -2,8 +2,9 @@ import os
 import time
 from rest_framework.views import APIView
 import cloudinary.utils
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
+from rest_framework.permissions import IsAdminUser
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.utils import timezone
@@ -16,7 +17,7 @@ class UserList(generics.ListCreateAPIView):
     serializer_class = UserSerializer
 
     def get_queryset(self):
-        queryset = CustomUser.objects.exclude(is_superuser=True)
+        queryset = CustomUser.objects.exclude(is_verified=True,is_superuser=True)
         user = self.request.user
         
         # If the viewing user is logged in and has configured a gender,
@@ -154,3 +155,72 @@ class CompleteOnboardingView(APIView):
             IDProof.objects.create(user=user, image_url=url)
             
         return Response({"message": "Documents submitted successfully."})
+
+
+class AdminPendingUserSerializer(serializers.ModelSerializer):
+    id_proofs = serializers.SerializerMethodField()
+    profile_photos = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'email', 'full_name', 'gender', 'id_proofs', 'profile_photos']
+    
+    def get_full_name(self, obj):
+        f_name = getattr(obj, 'first_name', '') or ''
+        l_name = getattr(obj, 'last_name', '') or ''
+        combined = f"{f_name} {l_name}".strip()
+        return combined if combined else obj.username
+    
+    def get_id_proofs(self, obj):
+        return [proof.image_url for proof in obj.id_proofs.all()]
+        
+    def get_profile_photos(self, obj):
+        return [photo.image_url for photo in obj.photos.all()]
+
+# View 1: List all pending users
+class PendingVerificationListView(generics.ListAPIView):
+    permission_classes = [IsAdminUser] # ONLY superusers/staff can access
+    serializer_class = AdminPendingUserSerializer
+
+    def get_queryset(self):
+        # Fetch users who are NOT verified, but HAVE uploaded ID proofs
+        return CustomUser.objects.filter(is_verified=False, id_proofs__isnull=False).distinct()
+
+# View 2: Approve or Reject a user
+class AdminVerifyUserView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, user_id):
+        try:
+            user = CustomUser.objects.get(id=user_id)
+            action = request.data.get('action') # 'approve' or 'reject'
+            
+            if action == 'approve':
+                # 1. Get the list of photo URLs the admin kept ticked
+                approved_photos = request.data.get('approved_photos', [])
+                
+                # 2. Delete any UserPhoto where the URL is NOT in the approved list
+                user.photos.exclude(image_url__in=approved_photos).delete()
+                
+                # 3. Safety Check: If they deleted the main profile pic, assign a new one
+                remaining_photos = user.photos.all()
+                if remaining_photos.exists() and not remaining_photos.filter(is_profile_pic=True).exists():
+                    first_photo = remaining_photos.first()
+                    first_photo.is_profile_pic = True
+                    first_photo.save()
+                
+                # 4. Verify the user and delete the ID proofs (Security Best Practice)
+                user.is_verified = True
+                user.save()
+                user.id_proofs.all().delete() 
+                
+                return Response({"message": "User approved and photos filtered successfully."})
+                
+            elif action == 'reject':
+                # Delete ID proofs to reset them to unverified status
+                user.id_proofs.all().delete()
+                return Response({"message": "User rejected. They must re-upload."})
+                
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
