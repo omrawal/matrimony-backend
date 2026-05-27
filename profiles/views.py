@@ -17,7 +17,7 @@ class UserList(generics.ListCreateAPIView):
     serializer_class = UserSerializer
 
     def get_queryset(self):
-        queryset = CustomUser.objects.exclude(is_verified=True,is_superuser=True)
+        queryset = CustomUser.objects.exclude(is_verified=True, is_hidden=False, is_superuser=True)
         user = self.request.user
         
         # If the viewing user is logged in and has configured a gender,
@@ -221,6 +221,115 @@ class AdminVerifyUserView(APIView):
                 # Delete ID proofs to reset them to unverified status
                 user.id_proofs.all().delete()
                 return Response({"message": "User rejected. They must re-upload."})
+                
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ManagePhotosView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, action):
+        user = request.user
+        url = request.data.get('url')
+
+        if not url:
+            return Response({"error": "URL is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == 'add':
+            # If they have no profile picture, make this one the profile picture
+            is_main = not user.photos.filter(is_profile_pic=True).exists()
+            UserPhoto.objects.create(
+                user=user, 
+                image_url=url, 
+                is_profile_pic=is_main, 
+                public_id="managed_upload"
+            )
+            return Response({"message": "Photo added successfully."})
+
+        elif action == 'delete':
+            photo = user.photos.filter(image_url=url).first()
+            if photo:
+                was_main = photo.is_profile_pic
+                photo.delete()
+                # If they deleted their main profile picture, automatically assign the next available one
+                if was_main:
+                    next_photo = user.photos.first()
+                    if next_photo:
+                        next_photo.is_profile_pic = True
+                        next_photo.save()
+            return Response({"message": "Photo deleted."})
+
+        elif action == 'set-profile':
+            # Set all photos to False, then set the selected one to True
+            user.photos.update(is_profile_pic=False)
+            user.photos.filter(image_url=url).update(is_profile_pic=True)
+            return Response({"message": "Profile picture updated."})
+
+        return Response({"error": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+class AdminUserManagementView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        # Fetch all verified users (both hidden and visible)
+        users = CustomUser.objects.filter(is_verified=True, is_superuser=False).order_by('-date_joined')
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data)
+
+    def patch(self, request, user_id):
+        # Allow admin to update any text details or toggle 'is_hidden'
+        try:
+            user = CustomUser.objects.get(id=user_id)
+            serializer = UserSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+class AdminManageUserPhotosView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, user_id, action):
+        try:
+            user = CustomUser.objects.get(id=user_id)
+            url = request.data.get('url')
+            
+            if not url:
+                return Response({"error": "URL is required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # --- NEW: ADD PHOTO ACTION ---
+            if action == 'add':
+                is_main = not user.photos.filter(is_profile_pic=True).exists()
+                from .models import UserPhoto # ensure imported
+                UserPhoto.objects.create(
+                    user=user, 
+                    image_url=url, 
+                    is_profile_pic=is_main, 
+                    public_id="admin_managed_upload"
+                )
+                return Response({"message": "Photo added by admin successfully."})
+
+            # --- EXISTING ACTIONS ---
+            elif action == 'delete':
+                photo = user.photos.filter(image_url=url).first()
+                if photo:
+                    was_main = photo.is_profile_pic
+                    photo.delete()
+                    if was_main:
+                        next_photo = user.photos.first()
+                        if next_photo:
+                            next_photo.is_profile_pic = True
+                            next_photo.save()
+                return Response({"message": "Photo deleted by admin."})
+                
+            elif action == 'set-profile':
+                user.photos.update(is_profile_pic=False)
+                user.photos.filter(image_url=url).update(is_profile_pic=True)
+                return Response({"message": "Profile picture updated by admin."})
                 
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)

@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import AdminVerifyUserView, CloudinarySignatureView, CompleteOnboardingView, PendingVerificationListView, UserList, UserDetail, UserLoginView, UserLogoutView, CurrentUserView, VisitorHistoryList
+from .views import AdminManageUserPhotosView, AdminUserManagementView, AdminVerifyUserView, CloudinarySignatureView, CompleteOnboardingView, ManagePhotosView, PendingVerificationListView, UserList, UserDetail, UserLoginView, UserLogoutView, CurrentUserView, VisitorHistoryList
 
 urlpatterns = [
     path('users/', UserList.as_view()),
@@ -12,4 +12,8 @@ urlpatterns = [
     path('complete-onboarding/', CompleteOnboardingView.as_view()),
     path('admin/pending-verifications/', PendingVerificationListView.as_view()),
     path('admin/verify-user/<int:user_id>/', AdminVerifyUserView.as_view()),
+    path('me/photos/<str:action>/', ManagePhotosView.as_view(), name='manage_photos'),
+    path('admin/manage-users/', AdminUserManagementView.as_view()),
+    path('admin/manage-users/<int:user_id>/', AdminUserManagementView.as_view()),
+    path('admin/manage-users/<int:user_id>/photos/<str:action>/', AdminManageUserPhotosView.as_view()),
 ]

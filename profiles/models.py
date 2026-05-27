@@ -17,6 +17,7 @@ class CustomUser(AbstractUser):
     preferences = models.TextField(null=True, blank=True)
     bio = models.TextField(null=True, blank=True)
     is_verified = models.BooleanField(default=False)
+    is_hidden = models.BooleanField(default=False)
 
     def __str__(self):
         # Fallback string formatting to avoid NoneType concatenation errors

@@ -37,7 +37,7 @@ class UserSerializer(serializers.ModelSerializer):
             'profile_picture',
             'is_verified',
             'verification_status',
-            'is_staff','album',
+            'is_staff','album','is_hidden'
         ]
         extra_kwargs = {
             'password': {
