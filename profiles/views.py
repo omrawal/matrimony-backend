@@ -58,7 +58,7 @@ class VisitorHistoryList(generics.ListAPIView):
         return ProfileViewLog.objects.filter(host=self.request.user)
 
 
-class CurrentUserView(generics.RetrieveAPIView):
+class CurrentUserView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
