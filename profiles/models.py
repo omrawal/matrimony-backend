@@ -2,12 +2,16 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from django.core.validators import RegexValidator
 
 class CustomUser(AbstractUser):
     GENDER_CHOICES = [
         ('male', 'Male'),
         ('female', 'Female'),
     ]
+    phone_regex = RegexValidator(regex=r'^\d{10}$', message="Phone number must be exactly 10 digits.")
+    phone_number = models.CharField(validators=[phone_regex], max_length=10, unique=True, null=True, blank=True)
+
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
     age = models.IntegerField(null=True, blank=True)
@@ -18,6 +22,25 @@ class CustomUser(AbstractUser):
     bio = models.TextField(null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     is_hidden = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        # Check if this is a brand new user being created
+        is_new_user = self.pk is None
+        
+        if is_new_user and self.is_superuser:
+            super().save(*args, **kwargs)
+            return
+        
+        if is_new_user and not self.username:
+            self.username = "TEMP_USER"
+            
+        super().save(*args, **kwargs) # Save to get the database Primary Key (self.pk)
+        
+        if is_new_user and not self.is_superuser:
+            # Now that we have the ID, generate the BSS format (e.g., ID 45 becomes BSS0045)
+            self.username = f"BSS{self.pk:04d}"
+            # Save ONLY the username field to prevent an infinite loop
+            super().save(update_fields=['username'])
 
     def __str__(self):
         # Fallback string formatting to avoid NoneType concatenation errors
