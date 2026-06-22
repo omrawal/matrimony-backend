@@ -427,3 +427,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+matrimony_env/
+db.sqlite3
+codebase_documentation.txt
+generate_codebase_doc.py
+profiles/migrations/
