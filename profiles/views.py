@@ -9,8 +9,8 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.utils import timezone
 
-from .models import CustomUser, IDProof, ProfileViewLog, UserPhoto
-from .serializers import ProfileViewLogSerializer, UserSerializer
+from .models import ContactViewLog, CustomUser, IDProof, ProfileViewLog, UserPhoto
+from .serializers import ProfileViewLogSerializer, UserContactDetailsSerializer, UserSerializer
 
 
 class UserList(generics.ListCreateAPIView):
@@ -131,6 +131,18 @@ class CompleteOnboardingView(APIView):
     def post(self, request):
         user = request.user
         data = request.data
+
+        user.time_of_birth = data.get('time_of_birth', user.time_of_birth)
+        user.place_of_birth = data.get('place_of_birth', user.place_of_birth)
+        user.astrology = data.get('astrology', user.astrology)
+        user.diet = data.get('diet', user.diet)
+        user.drink = data.get('drink', user.drink)
+        user.mother_name = data.get('mother_name', user.mother_name)
+        user.father_name = data.get('father_name', user.father_name)
+        user.mother_contact = data.get('mother_contact', user.mother_contact)
+        user.father_contact = data.get('father_contact', user.father_contact)
+        user.address = data.get('address', user.address)
+        user.save()
         
         # 1. Save Profile Photos
         photo_urls = data.get('photos', [])
@@ -331,5 +343,49 @@ class AdminManageUserPhotosView(APIView):
                 user.photos.filter(image_url=url).update(is_profile_pic=True)
                 return Response({"message": "Profile picture updated by admin."})
                 
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ViewContactDetailsAPI(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, user_id):
+        viewer = request.user
+        today = timezone.now().date()
+        
+        # 1. Check if the user is trying to view themselves
+        if viewer.id == user_id:
+            user = CustomUser.objects.get(id=user_id)
+            return Response(UserContactDetailsSerializer(user).data)
+
+        # 2. Check if they have already viewed this specific profile today (don't charge twice)
+        already_viewed = ContactViewLog.objects.filter(
+            viewer=viewer, 
+            viewed_user_id=user_id, 
+            timestamp__date=today
+        ).exists()
+
+        if not already_viewed:
+            # 3. Check the Daily Limit (Max 10)
+            views_today = ContactViewLog.objects.filter(
+                viewer=viewer, 
+                timestamp__date=today
+            ).count()
+            
+            if views_today >= 10:
+                return Response(
+                    {"error": "You have reached your daily limit of 10 contact views."}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # 4. Log the new view
+            ContactViewLog.objects.create(viewer=viewer, viewed_user_id=user_id)
+
+        # 5. Return the sensitive data
+        try:
+            user = CustomUser.objects.get(id=user_id)
+            serializer = UserContactDetailsSerializer(user)
+            return Response(serializer.data)
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)

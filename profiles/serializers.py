@@ -18,7 +18,8 @@ class UserSerializer(serializers.ModelSerializer):
         ],
     )
     gender = serializers.ChoiceField(choices=CustomUser.GENDER_CHOICES, required=True)
-    age = serializers.IntegerField(required=True, min_value=18)
+    age = serializers.SerializerMethodField()
+    date_of_birth = serializers.DateField(required=True, write_only=True)
 
     # Custom read-only field computed at runtime
     full_name = serializers.SerializerMethodField()
@@ -33,26 +34,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = [
-            "id",
-            "username",
-            "first_name",
-            "last_name",
-            "full_name",
-            "phone_number",
-            "email",
-            "age",
-            "cast",
-            "location",
-            "gender",
-            "preferences",
-            "bio",
-            "password",
-            "profile_picture",
-            "is_verified",
-            "verification_status",
-            "is_staff",
-            "album",
-            "is_hidden",
+            "id", "username", "first_name", "last_name", "full_name", "phone_number", 
+            "email", "date_of_birth", "age", "cast", "location", "gender", "preferences", 
+            "bio", "password", "profile_picture", "is_verified", "verification_status", 
+            "is_staff", "album", "is_hidden"
         ]
         extra_kwargs = {
             "password": {"write_only": True, "required": False},
@@ -112,6 +97,9 @@ class UserSerializer(serializers.ModelSerializer):
     def get_album(self, obj):
         return [photo.image_url for photo in obj.photos.all()]
 
+    def get_age(self, obj):
+        return obj.age
+
 
 class ProfileViewLogSerializer(serializers.ModelSerializer):
     # This automatically picks up full_name now because it nests the updated UserSerializer!
@@ -120,3 +108,13 @@ class ProfileViewLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProfileViewLog
         fields = ["id", "visitor_details", "timestamp"]
+
+
+class UserContactDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = [
+            'phone_number', 'email', 'time_of_birth', 'place_of_birth', 
+            'astrology', 'diet', 'drink', 'mother_name', 'father_name', 
+            'mother_contact', 'father_contact', 'address'
+        ]

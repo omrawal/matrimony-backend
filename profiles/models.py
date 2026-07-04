@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.core.validators import RegexValidator
+from datetime import date
 
 class CustomUser(AbstractUser):
     GENDER_CHOICES = [
@@ -14,7 +15,10 @@ class CustomUser(AbstractUser):
 
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
-    age = models.IntegerField(null=True, blank=True)
+    
+    # --- REPLACED: age is now calculated from date_of_birth ---
+    date_of_birth = models.DateField(null=True, blank=True) 
+    
     cast = models.CharField(max_length=100, null=True, blank=True)
     location = models.CharField(max_length=255, null=True, blank=True)
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
@@ -23,8 +27,27 @@ class CustomUser(AbstractUser):
     is_verified = models.BooleanField(default=False)
     is_hidden = models.BooleanField(default=False)
 
+    # --- NEW SENSITIVE DETAILS ---
+    time_of_birth = models.TimeField(null=True, blank=True)
+    place_of_birth = models.CharField(max_length=255, null=True, blank=True)
+    astrology = models.CharField(max_length=50, null=True, blank=True) # e.g., Manglik, Shani
+    diet = models.CharField(max_length=50, null=True, blank=True) # e.g., Veg, Non-Veg
+    drink = models.CharField(max_length=50, null=True, blank=True) # e.g., Never, Occasionally
+    mother_name = models.CharField(max_length=150, null=True, blank=True)
+    father_name = models.CharField(max_length=150, null=True, blank=True)
+    mother_contact = models.CharField(max_length=15, null=True, blank=True)
+    father_contact = models.CharField(max_length=15, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
+
+    @property
+    def age(self):
+        """Dynamically calculates age based on DOB"""
+        if self.date_of_birth:
+            today = date.today()
+            return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
+        return None
+
     def save(self, *args, **kwargs):
-        # Check if this is a brand new user being created
         is_new_user = self.pk is None
         
         if is_new_user and self.is_superuser:
@@ -34,21 +57,26 @@ class CustomUser(AbstractUser):
         if is_new_user and not self.username:
             self.username = "TEMP_USER"
             
-        super().save(*args, **kwargs) # Save to get the database Primary Key (self.pk)
+        super().save(*args, **kwargs) 
         
         if is_new_user and not self.is_superuser:
-            # Now that we have the ID, generate the BSS format (e.g., ID 45 becomes BSS0045)
             self.username = f"BSS{self.pk:04d}"
-            # Save ONLY the username field to prevent an infinite loop
             super().save(update_fields=['username'])
 
     def __str__(self):
-        # Fallback string formatting to avoid NoneType concatenation errors
         f_name = self.first_name or ""
         l_name = self.last_name or ""
         name_str = f" ({f_name} {l_name})".strip()
         return f"{self.username}{name_str if f_name or l_name else ''}"
 
+# --- NEW: TRACKING MODEL FOR LIMITS ---
+class ContactViewLog(models.Model):
+    viewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='contacts_viewed')
+    viewed_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='contact_viewers')
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
 
 class ProfileViewLog(models.Model):
     visitor = models.ForeignKey(
